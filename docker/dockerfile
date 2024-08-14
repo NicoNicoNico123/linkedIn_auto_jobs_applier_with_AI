@@ -1,0 +1,47 @@
+# Use an official Python runtime as a parent image
+FROM python:3.10-slim
+
+# Set the working directory in the container
+WORKDIR /app
+
+# Install system dependencies including Chromium
+RUN apt-get update && apt-get install -y \
+    build-essential \
+    libssl-dev \
+    libffi-dev \
+    python3-dev \
+    python3-pip \
+    chromium \
+    chromium-driver \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install JupyterLab
+RUN pip install jupyterlab
+
+# Install Python packages
+RUN pip install \
+    langchain==0.2.11 \
+    langchain-community==0.2.10 \
+    langchain-core==0.2.24 \
+    langchain-openai==0.1.17 \
+    langchain-text-splitters==0.2.2 \
+    langsmith==0.1.93 \
+    Levenshtein==0.25.1 \
+    openai==1.37.1 \
+    regex==2024.7.24 \
+    reportlab==4.2.2 \
+    selenium==4.9.1 \
+    webdriver-manager==4.0.2 \
+    xhtml2pdf \
+    click
+
+# Expose the port JupyterLab runs on
+EXPOSE 8888
+
+# Set environment variables for Chromium
+ENV CHROME_BIN=/usr/bin/chromium
+ENV CHROME_PATH=/usr/lib/chromium/
+
+# Command to run JupyterLab
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--no-browser"]
