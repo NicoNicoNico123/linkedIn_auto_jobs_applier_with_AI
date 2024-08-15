@@ -4,8 +4,10 @@ import yaml
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
 import click
-
+from selenium import webdriver
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from utils import chromeBrowserOptions
 from gpt import GPTAnswerer
 from linkedIn_authenticator import LinkedInAuthenticator
@@ -161,13 +163,32 @@ class FileManager:
         
         return result
 
+
+
 def init_browser():
     try:
-        options = chromeBrowserOptions()
-        service = ChromeService(ChromeDriverManager().install())
-        return webdriver.Chrome(service=service, options=options)
+        options = webdriver.ChromeOptions()
+        options.add_argument('--no-sandbox')
+        options.add_argument('--disable-dev-shm-usage')
+        
+        # Connect to the Selenium Grid running on localhost:4444
+        command_executor = 'http://localhost:4444/wd/hub'
+
+        
+        # Create a Remote WebDriver instance
+        driver = webdriver.Remote(
+            command_executor=command_executor,
+            options=options,
+        )
+        
+        return driver
     except Exception as e:
-        raise RuntimeError(f"Failed to initialize browser: {str(e)}")
+        import traceback
+        error_message = f"Failed to initialize browser. Error: {str(e)}\n"
+        error_message += f"Traceback: {traceback.format_exc()}"
+        raise RuntimeError(error_message)
+
+# The rest of your code remains the same
 
 def create_and_run_bot(email: str, password: str, parameters: dict, openai_api_key: str):
     try:

@@ -1,0 +1,23 @@
+version: '3.8'
+
+services:
+  python-app:
+    build: 
+      context: .
+      dockerfile: Dockerfile
+    container_name: python_jupyterlab
+    ports:
+      - "8888:8888"
+    volumes:
+      - .:/app
+    depends_on:
+      - selenium
+    command: ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--no-browser"]
+
+  selenium:
+    container_name: remote_chromedriver
+    image: seleniarm/standalone-chromium:latest
+    shm_size: 2gb
+    ports:
+      - "4444:4444"
+    restart: always

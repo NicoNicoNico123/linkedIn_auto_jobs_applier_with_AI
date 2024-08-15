@@ -1,26 +1,45 @@
-# Use an official Python runtime as a parent image
-FROM python:3.10-slim
+# Use the Selenium standalone Docker image
+FROM selenium/standalone-docker:latest
+
+# Switch to root to install packages
+USER root
+
+ENV SE_VNC_NO_PASSWORD=1
+
+# Install Python, pip, and venv
+RUN sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv
 
 # Set the working directory in the container
 WORKDIR /app
 
-# Install system dependencies including Chromium
-RUN apt-get update && apt-get install -y \
+# Install system dependencies
+RUN sudo apt-get update && sudo apt-get install -y \
     build-essential \
     libssl-dev \
     libffi-dev \
-    python3-dev \
-    python3-pip \
-    chromium \
-    chromium-driver \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/*
+    libnss3 \
+    libfontconfig1 \
+    wget \
+    dbus \
+    libva2 \
+    && sudo apt-get clean \
+    && sudo rm -rf /var/lib/apt/lists/*
 
-# Install JupyterLab
-RUN pip install jupyterlab
+# Create virtual environment
+RUN python3 -m venv /opt/venv
 
-# Install Python packages
-RUN pip install \
+# Set up shell to use venv by default
+RUN echo "source /opt/venv/bin/activate" >> /etc/bash.bashrc
+RUN echo "source /opt/venv/bin/activate" >> /home/seluser/.bashrc
+
+# Activate virtual environment for subsequent RUN commands
+ENV PATH="/opt/venv/bin:$PATH"
+
+# Install JupyterLab in the virtual environment
+RUN pip3 install --no-cache-dir jupyterlab
+
+# Install Python packages in the virtual environment
+RUN pip3 install --no-cache-dir \
     langchain==0.2.11 \
     langchain-community==0.2.10 \
     langchain-core==0.2.24 \
@@ -34,14 +53,27 @@ RUN pip install \
     selenium==4.9.1 \
     webdriver-manager==4.0.2 \
     xhtml2pdf \
-    click
+    click \
+    gradio
+
+# Expose the port for Selenium Grid
+EXPOSE 4444
 
 # Expose the port JupyterLab runs on
 EXPOSE 8888
 
-# Set environment variables for Chromium
-ENV CHROME_BIN=/usr/bin/chromium
-ENV CHROME_PATH=/usr/lib/chromium/
+# Copy the configuration file for dynamic Grid
+COPY config.toml /opt/bin/config.toml
 
-# Command to run JupyterLab
-CMD ["jupyter", "lab", "--ip=0.0.0.0", "--allow-root", "--no-browser"]
+# Add a script to start JupyterLab
+COPY start_jupyter.sh /opt/bin/start_jupyter.sh
+RUN sudo chmod +x /opt/bin/start_jupyter.sh
+
+# Modify the entry point to also start JupyterLab
+RUN sudo sed -i '$ i/opt/bin/start_jupyter.sh &' /opt/bin/entry_point.sh
+
+# Switch back to the seluser
+USER seluser
+
+# The entry point script will start both Selenium Grid and JupyterLab
+CMD ["/opt/bin/entry_point.sh"]
