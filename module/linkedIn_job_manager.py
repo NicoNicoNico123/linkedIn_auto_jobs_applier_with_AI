@@ -10,6 +10,8 @@ from selenium.webdriver.common.by import By
 import utils
 from job import Job
 from linkedIn_easy_applier import LinkedInEasyApplier
+import pickle
+from datetime import datetime
 
 
 class EnvironmentKeys:
@@ -114,45 +116,65 @@ class LinkedInJobManager:
                 utils.printyellow(f"Sleeping for {sleep_time / 60} minutes.")
                 time.sleep(sleep_time)
                 page_sleep += 1
-
+    
     def apply_jobs(self):
         try:
+            # Check if there are no jobs on the page
             try:
                 no_jobs_element = self.driver.find_element(By.CLASS_NAME, 'jobs-search-two-pane__no-results-banner--expand')
                 if 'No matching jobs found' in no_jobs_element.text or 'unfortunately, things aren' in self.driver.page_source.lower():
+                    utils.printyellow("No more jobs on this page.")
                     raise Exception("No more jobs on this page")
             except NoSuchElementException:
                 pass
-            
+
+            # Scroll through the job results to ensure all elements are loaded
+            utils.printgreen("Scrolling through job results to load all elements.")
             job_results = self.driver.find_element(By.CLASS_NAME, "jobs-search-results-list")
             utils.scroll_slow(self.driver, job_results)
             utils.scroll_slow(self.driver, job_results, step=300, reverse=True)
             
+            # Fetch job list elements
+            utils.printgreen("Fetching job list elements.")
             job_list_elements = self.driver.find_elements(By.CLASS_NAME, 'scaffold-layout__list-container')[0].find_elements(By.CLASS_NAME, 'jobs-search-results__list-item')
             
             if not job_list_elements:
+                utils.printred("No job class elements found on page.")
                 raise Exception("No job class elements found on page")
             
+            # Extract job information and apply
             job_list = [Job(*self.extract_job_information_from_tile(job_element)) for job_element in job_list_elements]
             
             for job in job_list:
                 if self.is_blacklisted(job.title, job.company, job.link):
                     utils.printyellow(f"Blacklisted {job.title} at {job.company}, skipping...")
                     self.write_to_file(job.company, job.location, job.title, job.link, "skipped")
+                    self.save_job_object(job, "skipped")
                     continue
 
                 try:
+                    utils.printgreen(f"Attempting to apply for {job.title} at {job.company}.")
                     if job.apply_method not in {"Continue", "Applied", "Apply"}:
+                        utils.printgreen("Setting current job in easy_applier_component")
+                        self.easy_applier_component.set_current_job(job)
+                        utils.printgreen("Calling job_apply method of easy_applier_component")
                         self.easy_applier_component.job_apply(job)
                 except Exception as e:
+                    utils.printred(f"Failed to apply for {job.title} at {job.company}.")
                     utils.printred(traceback.format_exc())
                     self.write_to_file(job.company, job.location, job.title, job.link, "failed")
+                    self.save_job_object(job, "failed")
                     continue  
+                
+                utils.printgreen(f"Successfully applied for {job.title} at {job.company}.")
+                self.save_job_object(job, "success")
                 self.write_to_file(job.company, job.location, job.title, job.link, "success")
         
         except Exception as e:
-            traceback.format_exc()
+            utils.printred("An error occurred during the job application process.")
+            utils.printred(traceback.format_exc())
             raise e
+
     
     def write_to_file(self, company, job_title, link, job_location, file_name):
         to_write = [company, job_title, link, job_location]
@@ -228,3 +250,21 @@ class LinkedInJobManager:
         company_blacklisted = company.strip().lower() in (word.strip().lower() for word in self.company_blacklist)
         link_seen = link in self.seen_jobs
         return title_blacklisted or company_blacklisted or link_seen
+    
+    def save_job_object(self, job, status):
+        # Create a directory for each status if it doesn't exist
+        status_dir = os.path.join(self.output_file_directory, status)
+        os.makedirs(status_dir, exist_ok=True)
+
+        # Generate a filename based on the job title, company, and current timestamp
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        safe_title = ''.join(e for e in job.title if e.isalnum())
+        safe_company = ''.join(e for e in job.company if e.isalnum())
+        filename = f"{safe_title}_{safe_company}_{timestamp}.pkl"
+        file_path = os.path.join(status_dir, filename)
+
+        # Save the job object using pickle
+        with open(file_path, 'wb') as f:
+            pickle.dump(job, f)
+
+        utils.printgreen(f"Job object saved: {file_path}")

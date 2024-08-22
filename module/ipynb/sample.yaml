@@ -1,0 +1,44 @@
+personal_information:
+  name: "Mario"
+  surname: "Rossi"
+  dateOfBirth: "15/09/1988"
+  country: "Italy"
+  address: "Via Montenapoleone 10, 20121 Milan"
+  phonePrefix: "+39"
+  phone: "3351234567"
+  email: "mario.rossi@techcode.it"
+
+self_identification:
+  gender: "Male"
+  pronouns: "He/Him"
+  veteran: false
+  disability: false
+  ethnicity: "Mediterranean"
+
+education_details:
+  - degree: "Master"
+    university: "Politecnico di Milano"
+    gpa: "3.8/4"
+    graduationYear: "2012"
+    fieldOfStudy: "Computer Engineering"
+    skillsAcquired:
+      - "artificialIntelligence"
+      - "cloudComputing"
+
+experience_details:
+  - position: "Senior Software Engineer"
+    company: "TechInnovate S.p.A."
+    employmentPeriod: "06/2018 - Present"
+    location: "Milan, Italy"
+    industry: "FinTech"
+    keyResponsibilities:
+      - "Led development of real-time trading algorithm, improving transaction speed by 40%"
+      - "Implemented CI/CD pipeline, reducing deployment time from days to hours"
+      - "Mentored junior developers, increasing team productivity by 25% over 6 months"
+    skillsAcquired:
+      java: "5"
+      springBoot: "4"
+      kubernetes: "3"
+      aws: "4"
+      microservices: "4"
+      agileMethodologies: "5"

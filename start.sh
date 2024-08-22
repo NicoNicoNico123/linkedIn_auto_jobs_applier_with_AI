@@ -31,6 +31,7 @@ echo "Starting the container..."
 if ! docker run -d \
   -p 4444:4444 \
   -p 8888:8888 \
+  -p 7862:7862 \
   -v "${CURRENT_DIR}/module":/app \
   -v "${CURRENT_DIR}/assets":/opt/selenium/assets \
   -v //var/run/docker.sock:/var/run/docker.sock \

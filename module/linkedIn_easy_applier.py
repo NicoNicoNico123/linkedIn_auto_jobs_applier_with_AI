@@ -18,13 +18,13 @@ from selenium.webdriver.support.ui import Select, WebDriverWait
 import tempfile
 import time
 from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
+from reportlab.lib.styles import getSampleStyleSheet
+from reportlab.platypus import Paragraph, SimpleDocTemplate
+from datetime import datetime
 import io
 import time
-from reportlab.lib.pagesizes import letter
-from reportlab.pdfgen import canvas
-from reportlab.lib.pagesizes import letter
-from xhtml2pdf import pisa
+import pdfkit
+import pickle
 
 import utils    
 
@@ -36,19 +36,32 @@ class LinkedInEasyApplier:
         self.resume_dir = resume_dir
         self.set_old_answers = set_old_answers
         self.gpt_answerer = gpt_answerer
+        self.current_job = None
 
+    def set_current_job(self, job: Any):
+        self.current_job = job
+    
     def job_apply(self, job: Any):
+        print(f"Starting job application for {job.title} at {job.company}")
+        self.set_current_job(job)
+        if self.current_job != job:
+            print("Error: Failed to set current job correctly")
+            raise ValueError("Failed to set current job correctly")
         self.driver.get(job.link)
         time.sleep(random.uniform(3, 5))
         try:
             easy_apply_button = self._find_easy_apply_button()
             job_description = self._get_job_description()
             job.set_job_description(job_description)
+            print("Clicking Easy Apply button")
             easy_apply_button.click()
             self.gpt_answerer.set_job(job)
+            print("Starting to fill application form")
             self._fill_application_form()
+            print("Finished filling application form")
         except Exception:
             tb_str = traceback.format_exc()
+            print(f"Exception occurred during job application: {tb_str}")
             self._discard_application()
             raise Exception(f"Failed to apply to job! Original exception: \nTraceback:\n{tb_str}")
 
@@ -91,10 +104,15 @@ class LinkedInEasyApplier:
         utils.scroll_slow(self.driver, scrollable_element, step=300, reverse=True)
 
     def _fill_application_form(self):
+        print("Entering _fill_application_form method")
         while True:
+            print("Calling fill_up method")
             self.fill_up()
+            print("Checking for next or submit")
             if self._next_or_submit():
+                print("Application submitted or moved to next page")
                 break
+        print("Exiting _fill_application_form method")
 
     def _next_or_submit(self):
         next_button = self.driver.find_element(By.CLASS_NAME, "artdeco-button--primary")
@@ -134,24 +152,32 @@ class LinkedInEasyApplier:
             pass
 
     def fill_up(self) -> None:
+        print("Entering fill_up method")
         try:
             easy_apply_content = self.driver.find_element(By.CLASS_NAME, 'jobs-easy-apply-content')
             pb4_elements = easy_apply_content.find_elements(By.CLASS_NAME, 'pb4')
+            print(f"Found {len(pb4_elements)} form elements to process")
             for element in pb4_elements:
+                print("Processing form element")
                 self._process_form_element(element)
         except Exception as e:
-            pass
+            print(f"Exception in fill_up: {str(e)}")
+        print("Exiting fill_up method")
         
 
 
     def _process_form_element(self, element: WebElement) -> None:
+        print("Entering _process_form_element method")
         try:
             if self._is_upload_field(element):
+                print("Upload field detected")
                 self._handle_upload_fields(element)
             else:
+                print("Non-upload field detected")
                 self._fill_additional_questions()
         except Exception as e:
-            pass
+            print(f"Exception in _process_form_element: {str(e)}")
+        print("Exiting _process_form_element method")
 
     def _is_upload_field(self, element: WebElement) -> bool:
         try:
@@ -174,53 +200,128 @@ class LinkedInEasyApplier:
                     self._create_and_upload_resume(element)
             elif 'cover' in parent.text.lower():
                 self._create_and_upload_cover_letter(element)
+    
+    def _generate_safe_filename(self, prefix=''):
+        if not self.current_job:
+            print("Error: No current job set for file generation")
+            raise ValueError("No current job set for file generation")
+
+        print(f"Current job: {self.current_job.title} at {self.current_job.company}")
+
+        today_date = datetime.now().strftime("%d%m%Y")
+
+        # Split the title and take only unique parts
+        title_parts = self.current_job.title.split()
+        unique_title_parts = []
+        for part in title_parts:
+            if part not in unique_title_parts:
+                unique_title_parts.append(part)
+        
+        safe_title = ''.join(e for e in ' '.join(unique_title_parts) if e.isalnum())
+        safe_company = ''.join(e for e in self.current_job.company if e.isalnum())
+        
+        base_filename = f"{prefix}_{safe_title}_{safe_company}_{today_date}" if prefix else f"{safe_title}_{safe_company}_{today_date}"
+        
+        print(f"Generated base filename: {base_filename}")
+        return base_filename
 
     def _create_and_upload_resume(self, element):
+        print("Starting _create_and_upload_resume method")
+        folder_path = 'generated_cv'
+        
+        print(f"Attempting to create folder: {folder_path}")
+        os.makedirs(folder_path, exist_ok=True)
+        print(f"Folder created or already exists: {folder_path}")
+
+        base_filename = self._generate_safe_filename()
+
         max_retries = 3
         retry_delay = 1
-        folder_path = 'generated_cv'
 
-        if not os.path.exists(folder_path):
-            os.makedirs(folder_path)
         for attempt in range(max_retries):
             try:
+                print(f"Attempt {attempt + 1} to create and upload resume")
                 html_string = self.gpt_answerer.get_resume_html()
-                with tempfile.NamedTemporaryFile(delete=False, suffix='.html', mode='w', encoding='utf-8') as temp_html_file:
-                    temp_html_file.write(html_string)
-                    file_name_HTML = temp_html_file.name
-
-                file_name_pdf = f"resume_{uuid.uuid4().hex}.pdf"
-                file_path_pdf = os.path.join(folder_path, file_name_pdf)
+                print("Resume HTML generated")
                 
-                with open(file_path_pdf, "wb") as f:
-                    f.write(base64.b64decode(utils.HTML_to_PDF(file_name_HTML)))
-                    
-                element.send_keys(os.path.abspath(file_path_pdf))
-                time.sleep(2)  # Give some time for the upload process
-                os.remove(file_name_HTML)
+                html_filename = f"{base_filename}.html"
+                html_filepath = os.path.join(folder_path, html_filename)
+                print(f"HTML filepath: {html_filepath}")
+
+                print("Writing HTML to file")
+                with open(html_filepath, 'w', encoding='utf-8') as html_file:
+                    html_file.write(html_string)
+                print(f"HTML file saved: {html_filepath}")
+
+                pdf_filename = f"{base_filename}.pdf"
+                pdf_filepath = os.path.join(folder_path, pdf_filename)
+                print(f"PDF filepath: {pdf_filepath}")
+
+                print(f"Converting HTML to PDF: {pdf_filepath}")
+                success = utils.html_to_pdf(html_filepath, pdf_filepath)
+
+                if not success:
+                    print("Failed to convert HTML to PDF")
+                    raise Exception("Failed to convert HTML to PDF")
+                
+                print(f"Uploading PDF: {pdf_filepath}")
+                element.send_keys(os.path.abspath(pdf_filepath))
+                print("Resume uploaded successfully")
                 return True
-            except Exception:
+
+            except Exception as e:
+                print(f"Error in attempt {attempt + 1}: {str(e)}")
                 if attempt < max_retries - 1:
+                    print(f"Retrying in {retry_delay} seconds")
                     time.sleep(retry_delay)
                 else:
                     tb_str = traceback.format_exc()
+                    print(f"Max retries reached. Upload failed: \nTraceback:\n{tb_str}")
                     raise Exception(f"Max retries reached. Upload failed: \nTraceback:\n{tb_str}")
 
     def _upload_resume(self, element: WebElement) -> None:
         element.send_keys(str(self.resume_dir))
 
     def _create_and_upload_cover_letter(self, element: WebElement) -> None:
+        print("Starting _create_and_upload_cover_letter method")
+        folder_path = os.path.join('generated_cv', 'coverletter')
+        
+        print(f"Attempting to create folder: {folder_path}")
+        os.makedirs(folder_path, exist_ok=True)
+        print(f"Folder created or already exists: {folder_path}")
+
+        base_filename = self._generate_safe_filename(prefix='CoverLetter')
+
+        # Generate cover letter content
+        print("Generating cover letter content")
         cover_letter = self.gpt_answerer.answer_question_textual_wide_range("Write a cover letter")
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.pdf') as temp_pdf_file:
-            letter_path = temp_pdf_file.name
-            c = canvas.Canvas(letter_path, pagesize=letter)
-            width, height = letter
-            text_object = c.beginText(100, height - 100)
-            text_object.setFont("Helvetica", 12)
-            text_object.textLines(cover_letter)
-            c.drawText(text_object)
-            c.save()
-            element.send_keys(letter_path)
+
+        # Create the PDF filename
+        pdf_filename = f"{base_filename}.pdf"
+        pdf_filepath = os.path.join(folder_path, pdf_filename)
+        print(f"PDF filepath: {pdf_filepath}")
+
+        # Create the PDF
+        doc = SimpleDocTemplate(pdf_filepath, pagesize=letter,
+                                rightMargin=72, leftMargin=72,
+                                topMargin=72, bottomMargin=18)
+
+        styles = getSampleStyleSheet()
+        style = styles["Normal"]
+
+        # Split the cover letter into paragraphs
+        paragraphs = [Paragraph(p, style) for p in cover_letter.split('\n\n')]
+
+        # Build the PDF
+        print("Building PDF")
+        doc.build(paragraphs)
+
+        print(f"Cover letter PDF saved: {pdf_filepath}")
+
+        # Upload the PDF
+        print(f"Uploading PDF: {pdf_filepath}")
+        element.send_keys(os.path.abspath(pdf_filepath))
+        print("Cover letter uploaded successfully")
 
     def _fill_additional_questions(self) -> None:
         form_sections = self.driver.find_elements(By.CLASS_NAME, 'jobs-easy-apply-form-section__grouping')
@@ -353,3 +454,32 @@ class LinkedInEasyApplier:
             self._enter_text(text_field, new_answer)
         except NoSuchElementException:
             pass
+
+    
+if __name__ == "__main__":
+
+    def load_job_object(file_path):
+        with open(file_path, 'rb') as f:
+            return pickle.load(f)
+
+    # Load the Job object from the pickle file
+    pickle_file_path = '/app/data_folder/output/success/TerritoryManagerTerritoryManagerwithverification_Consult_20240816_092317.pkl'
+    job = load_job_object(pickle_file_path)
+    print(f"Loaded job: {job.title} at {job.company}")
+
+    # Create a mock element for testing
+    class MockElement:
+        def send_keys(self, *args):
+            print(f"Mock upload: {args}")
+
+    # Create a mock GPTAnswerer
+    class MockGPTAnswerer:
+        def get_resume_html(self):
+            return "<html><body><h1>Mock Resume</h1></body></html>"
+
+    # Create an instance of LinkedInEasyApplier with mock objects
+    easy_applier = LinkedInEasyApplier(None, None, None, MockGPTAnswerer())
+    easy_applier.current_job = job  # Set the current job
+
+    # Call the method directly
+    easy_applier._create_and_upload_resume(MockElement())

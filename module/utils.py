@@ -4,10 +4,15 @@ import random
 import time
 from selenium.common.exceptions import WebDriverException
 from selenium.webdriver.chrome.service import Service as ChromeService
+from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from selenium import webdriver
 import time
 import glob
 from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.options import Options
+from xhtml2pdf import pisa
+import io
+import pdfkit
 
 headless = False
 chromeProfilePath = os.path.join(os.getcwd(), "chrome_profile", "linkedin_profile")
@@ -53,17 +58,45 @@ def scroll_slow(driver, scrollable_element, start=0, end=3600, step=100, reverse
     except Exception as e:
         print(f"Exception occurred: {e}")
 
+def html_to_pdf(FilePath, pdf_filepath):
+    # Validate and prepare file paths
+    if not os.path.isfile(FilePath):
+        raise FileNotFoundError(f"The specified file does not exist: {FilePath}")
+
+    # Ensure the file path uses the correct protocol
+    FilePath = f"file:///{os.path.abspath(FilePath).replace(os.sep, '/')}"
+    print(f"Converting HTML from: {FilePath}")
+
+    pdf_output_path = pdf_filepath
+    options = {
+        'enable-local-file-access': None  # Allow access to local files
+    }
+
+    try:
+        pdfkit.from_url(FilePath, pdf_output_path, options=options)
+        print(f"PDF generated successfully and saved to {pdf_output_path}")
+        return pdf_output_path
+    except Exception as e:
+        raise RuntimeError(f"PDF generation failed: {e}")
 
 def HTML_to_PDF(FilePath):
     # Validate and prepare file paths
     if not os.path.isfile(FilePath):
         raise FileNotFoundError(f"The specified file does not exist: {FilePath}")
     FilePath = f"file:///{os.path.abspath(FilePath).replace(os.sep, '/')}"
-    # Set up Chrome options
-    chrome_options = webdriver.ChromeOptions()
-    # Initialize Chrome driver
-    service = ChromeService(ChromeDriverManager().install())
-    driver = webdriver.Chrome(service=service, options=chrome_options)
+    print(FilePath)
+    # Set up Chrome options and desired capabilities
+    chrome_options = Options()
+    chrome_options.add_argument("--headless")  # Run in headless mode
+    chrome_options.add_argument("--disable-gpu")
+    chrome_options.add_argument("--no-sandbox")
+    chrome_options.add_argument("--disable-dev-shm-usage")
+
+    # Initialize Chrome driver remotely
+    driver = webdriver.Remote(
+        command_executor='http://localhost:4444/wd/hub',
+        options=chrome_options
+    )
     
     try:
         # Load the HTML file
@@ -104,25 +137,26 @@ def chromeBrowserOptions():
     options.add_argument("--disable-extensions")
     options.add_argument('--disable-gpu')
     options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--remote-debugging-port=9222')
+    # options.add_argument('--remote-debugging-port=9222')
     if headless:
         options.add_argument("--headless")
+    options.add_argument("--incognito")
     options.add_argument("--start-maximized")
     options.add_argument("--disable-blink-features")
     options.add_argument("--disable-blink-features=AutomationControlled")
-    options.add_experimental_option('useAutomationExtension', False)
-    options.add_experimental_option("excludeSwitches", ["enable-automation"])
+    # options.add_experimental_option('useAutomationExtension', False)
+    # options.add_experimental_option("excludeSwitches", ["enable-automation"])
     
     # Assicurati che la directory del profilo Chrome esista
     ensure_chrome_profile()
 
-    if len(chromeProfilePath) > 0:
-        initialPath = os.path.dirname(chromeProfilePath)
-        profileDir = os.path.basename(chromeProfilePath)
-        options.add_argument('--user-data-dir=' + initialPath)
-        options.add_argument("--profile-directory=" + profileDir)
-    else:
-        options.add_argument("--incognito")
+    # if len(chromeProfilePath) > 0:
+    #     initialPath = os.path.dirname(chromeProfilePath)
+    #     profileDir = os.path.basename(chromeProfilePath)
+    #     options.add_argument('--user-data-dir=' + initialPath)
+    #     options.add_argument("--profile-directory=" + profileDir)
+    # else:
+    #     options.add_argument("--incognito")
         
     return options
 
@@ -140,3 +174,23 @@ def printyellow(text):
     RESET = "\033[0m"
     # Stampa il testo in giallo
     print(f"{YELLOW}{text}{RESET}")
+
+def printgreen(text):
+    # ANSI color code for green
+    GREEN = "\033[92m"
+    RESET = "\033[0m"
+    # Print the text in green
+    print(f"{GREEN}{text}{RESET}")
+
+
+
+if __name__ == "__main__":
+    # Path to the sample HTML file
+    sample_html_file = '/app/generated_cv/temp_resume_9ddcf0cfc40c48b9a93f1f7f86584bee.html'
+
+    # Run the HTML to PDF conversion
+    try:
+        output_pdf = html_to_pdf(sample_html_file)
+        print(f"PDF successfully created: {output_pdf}")
+    except Exception as e:
+        print(f"An error occurred during PDF generation: {str(e)}")

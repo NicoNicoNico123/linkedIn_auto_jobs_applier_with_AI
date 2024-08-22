@@ -1,19 +1,19 @@
 # Use the Selenium standalone Docker image
 FROM selenium/standalone-docker:latest
 
-# Switch to root to install packages
+# Stay as root user
 USER root
 
 ENV SE_VNC_NO_PASSWORD=1
 
 # Install Python, pip, and venv
-RUN sudo apt-get update && sudo apt-get install -y python3 python3-pip python3-venv
+RUN apt-get update && apt-get install -y python3 python3-pip python3-venv
 
 # Set the working directory in the container
 WORKDIR /app
 
 # Install system dependencies
-RUN sudo apt-get update && sudo apt-get install -y \
+RUN apt-get update && apt-get install -y \
     build-essential \
     libssl-dev \
     libffi-dev \
@@ -22,15 +22,15 @@ RUN sudo apt-get update && sudo apt-get install -y \
     wget \
     dbus \
     libva2 \
-    && sudo apt-get clean \
-    && sudo rm -rf /var/lib/apt/lists/*
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/*
 
 # Create virtual environment
 RUN python3 -m venv /opt/venv
 
 # Set up shell to use venv by default
 RUN echo "source /opt/venv/bin/activate" >> /etc/bash.bashrc
-RUN echo "source /opt/venv/bin/activate" >> /home/seluser/.bashrc
+RUN echo "source /opt/venv/bin/activate" >> /root/.bashrc
 
 # Activate virtual environment for subsequent RUN commands
 ENV PATH="/opt/venv/bin:$PATH"
@@ -54,7 +54,8 @@ RUN pip3 install --no-cache-dir \
     webdriver-manager==4.0.2 \
     xhtml2pdf \
     click \
-    gradio
+    gradio \
+    pdfkit
 
 # Expose the port for Selenium Grid
 EXPOSE 4444
@@ -67,13 +68,13 @@ COPY config.toml /opt/bin/config.toml
 
 # Add a script to start JupyterLab
 COPY start_jupyter.sh /opt/bin/start_jupyter.sh
-RUN sudo chmod +x /opt/bin/start_jupyter.sh
+RUN chmod +x /opt/bin/start_jupyter.sh
 
 # Modify the entry point to also start JupyterLab
-RUN sudo sed -i '$ i/opt/bin/start_jupyter.sh &' /opt/bin/entry_point.sh
+RUN sed -i '$ i/opt/bin/start_jupyter.sh &' /opt/bin/entry_point.sh
 
-# Switch back to the seluser
-USER seluser
+# Ensure proper permissions
+RUN chmod -R 777 /app /opt/selenium /opt/bin
 
 # The entry point script will start both Selenium Grid and JupyterLab
 CMD ["/opt/bin/entry_point.sh"]

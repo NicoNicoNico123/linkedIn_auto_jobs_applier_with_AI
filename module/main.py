@@ -6,7 +6,6 @@ from selenium.webdriver.chrome.service import Service as ChromeService
 from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.chrome.service import Service
 import click
-from selenium import webdriver
 from selenium.webdriver.common.desired_capabilities import DesiredCapabilities
 from utils import chromeBrowserOptions
 from gpt import GPTAnswerer
@@ -166,11 +165,7 @@ class FileManager:
 
 
 def init_browser():
-    try:
-        options = webdriver.ChromeOptions()
-        options.add_argument('--no-sandbox')
-        options.add_argument('--disable-dev-shm-usage')
-        
+    try: 
         # Connect to the Selenium Grid running on localhost:4444
         command_executor = 'http://localhost:4444/wd/hub'
 
@@ -178,7 +173,7 @@ def init_browser():
         # Create a Remote WebDriver instance
         driver = webdriver.Remote(
             command_executor=command_executor,
-            options=options,
+            options=chromeBrowserOptions()
         )
         
         return driver
